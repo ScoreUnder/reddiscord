@@ -8,14 +8,14 @@ import net.dv8tion.jda.core.events.message.{MessageDeleteEvent, MessageReceivedE
 import net.dv8tion.jda.core.events.{Event, ReadyEvent}
 import net.dv8tion.jda.core.hooks.EventListener
 import score.discord.redditbot.DiscordUtil._
+import score.discord.redditbot.FutureUtil._
 import score.discord.redditbot.UIConstants.{ERROR_EMOJI, OK_EMOJI}
-import score.discord.redditbot.command.{Command, PinCommand}
+import score.discord.redditbot.command.PinCommand
 
 import scala.async.Async._
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
-import scala.util.{Failure, Success}
 
 class RedditEngine extends EventListener {
   private val pinCache = mutable.HashMap[ChanID, mutable.Set[MesgID]]()
@@ -72,12 +72,7 @@ class RedditEngine extends EventListener {
       voteCache(mesgID) match {
         case s@Some(_) => s
         case None =>
-          await(channel.getMessageById(mesgID).queueFuture().transform {
-            case Success(s) => Success(Some(s))
-            case Failure(f) =>
-              f.printStackTrace()
-              Success(None)
-          }) match {
+          await(channel.getMessageById(mesgID).queueFuture().asSuccessOption()) match {
             case Some(msg) =>
               val reacts = msg.getReactions.asScala
               val upvotes = reacts.find(_.getReactionEmote.getName == UPVOTE)
@@ -158,7 +153,6 @@ class RedditEngine extends EventListener {
             val channel = ev.getChannel
             val reaction = ev.getReaction
             val message = ev.getReaction.getMessageIdLong
-            val jda = ev.getJDA
             val dir = if (ev.isInstanceOf[MessageReactionAddEvent]) 1 else -1
             reaction.getReactionEmote.getName match {
               case UPVOTE =>

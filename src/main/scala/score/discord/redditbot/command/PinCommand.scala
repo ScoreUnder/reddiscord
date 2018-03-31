@@ -13,7 +13,7 @@ import scala.async.Async._
 import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 trait PinCommand extends Command {
   override def canBeExecuted(message: Message): Boolean =
@@ -28,9 +28,8 @@ object PinCommand {
     async {
       val oldPins = await(channel.getPinnedMessages.queueFuture()).asScala
       val unpinRemaining = for (pin <- oldPins)
-        yield pin.unpin.queueFuture().transform {
-          case Success(_) => Success(pin -> None)
-          case Failure(ex) => Success(pin -> Some(ex))
+        yield pin.unpin.queueFuture().transform { t =>
+          Success(pin -> t.failed.toOption)
         }
       await(Future.sequence(unpinRemaining))
     }
