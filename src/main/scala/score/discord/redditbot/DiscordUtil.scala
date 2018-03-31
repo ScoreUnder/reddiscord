@@ -7,6 +7,7 @@ import scala.concurrent.{Future, Promise}
 object DiscordUtil {
   type ChanID = Long
   type MesgID = Long
+  type UserID = Long
 
   def parseID(id: String): Long =
     try {

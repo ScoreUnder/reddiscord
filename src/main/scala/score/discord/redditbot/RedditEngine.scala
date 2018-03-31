@@ -2,7 +2,7 @@ package score.discord.redditbot
 
 import java.util.concurrent.Executors
 
-import net.dv8tion.jda.core.entities.{Message, MessageChannel, MessageType}
+import net.dv8tion.jda.core.entities.{Message, MessageChannel, MessageType, User}
 import net.dv8tion.jda.core.events.message.react.{GenericMessageReactionEvent, MessageReactionAddEvent, MessageReactionRemoveAllEvent}
 import net.dv8tion.jda.core.events.message.{MessageDeleteEvent, MessageReceivedEvent, MessageUpdateEvent}
 import net.dv8tion.jda.core.events.{Event, ReadyEvent}
@@ -10,7 +10,7 @@ import net.dv8tion.jda.core.hooks.EventListener
 import score.discord.redditbot.DiscordUtil._
 import score.discord.redditbot.FutureUtil._
 import score.discord.redditbot.UIConstants.{ERROR_EMOJI, OK_EMOJI}
-import score.discord.redditbot.command.PinCommand
+import score.discord.redditbot.command.{Command, PinCommand}
 
 import scala.async.Async._
 import scala.collection.JavaConverters._
@@ -19,6 +19,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 class RedditEngine extends EventListener {
   private val pinCache = mutable.HashMap[ChanID, mutable.Set[MesgID]]()
+  private var userVotes = mutable.HashMap[UserID, Int]() withDefaultValue 0
   private implicit val executor: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
 
@@ -57,6 +58,22 @@ class RedditEngine extends EventListener {
         err.printStackTrace()
         message.addReaction(ERROR_EMOJI).queue()
       }
+    }
+  }
+
+  class RedditKarma extends Command {
+    override def name: String = "karma"
+
+    override def canBeExecuted(message: Message): Boolean = true
+
+    override def execute(message: Message, args: String): Unit = {
+      val mentionedUsers = message.getMentionedUsers match {
+        case x if !x.isEmpty => x.asScala
+        case _ => List(message.getAuthor)
+      }
+      message.getChannel.sendMessage(mentionedUsers
+        .map(user => s"${user.getName}#${user.getDiscriminator}: ${userVotes(user.getIdLong)} karma")
+        .mkString("\n")).queue()
     }
   }
 
@@ -158,11 +175,13 @@ class RedditEngine extends EventListener {
               case UPVOTE =>
                 if (voteCache(message).isDefined) {
                   val votes = voteCache.upvote(message, dir)
+                  userVotes(ev.getUser.getIdLong) += dir
                   checkVotes(channel, message, votes)
                 } else cacheAndCheckVotes(channel, message)
               case DOWNVOTE =>
                 if (voteCache(message).isDefined) {
                   val votes = voteCache.downvote(message, dir)
+                  userVotes(ev.getUser.getIdLong) -= dir
                   checkVotes(channel, message, votes)
                 } else cacheAndCheckVotes(channel, message)
               case _ =>

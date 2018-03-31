@@ -23,6 +23,7 @@ class RedditBot {
         val reddit = new RedditEngine
         cmds register new reddit.RedditModeDisable
         cmds register new reddit.RedditModeEnable
+        cmds register new reddit.RedditKarma
         builder addEventListener reddit
         builder addEventListener cmds
         builder addEventListener new HidePinMessageListener
