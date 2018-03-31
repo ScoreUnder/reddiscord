@@ -1,5 +1,7 @@
 package score.discord.redditbot
 
+import java.util.concurrent.{Callable, Executors, TimeUnit}
+
 import net.dv8tion.jda.core.entities.MessageType
 import net.dv8tion.jda.core.events.Event
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent
@@ -10,7 +12,7 @@ class HidePinMessageListener extends EventListener {
     case ev: MessageReceivedEvent =>
       if (ev.getMessage.getType == MessageType.CHANNEL_PINNED_ADD
         && ev.getAuthor.getIdLong == ev.getJDA.getSelfUser.getIdLong) {
-        ev.getMessage.delete().queue()
+          ev.getMessage.delete().queueAfter(10, TimeUnit.SECONDS)
       }
     case _ =>
   }
