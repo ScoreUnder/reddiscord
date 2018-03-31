@@ -1,17 +1,11 @@
 package score.discord.redditbot
 
-import java.util
-
 class RedditVoteCache {
   val MAX_CACHE_SIZE = 20000
 
   case class Votes(up: Int = 0, down: Int = 0, var botVoted: Boolean = false)
 
-  private[this] val cache: util.LinkedHashMap[Long, Votes] =
-    new util.LinkedHashMap[Long, Votes](16, 0.75f, true) {
-      override def removeEldestEntry(eldest: util.Map.Entry[Long, Votes]): Boolean =
-        size >= MAX_CACHE_SIZE
-    }
+  private[this] val cache = new CacheMap[Long, Votes](MAX_CACHE_SIZE)
 
   def apply(message: Long) = Option(cache.get(message))
 
