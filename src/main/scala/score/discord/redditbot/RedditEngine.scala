@@ -19,16 +19,28 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 
 class RedditEngine extends EventListener {
   private val pinCache = mutable.HashMap[ChanID, mutable.Set[MesgID]]()
-  private var userVotes = mutable.HashMap[UserID, Int]() withDefaultValue 0
+  private val userVotes = mutable.HashMap[UserID, Int]() withDefaultValue 0
   private implicit val executor: ExecutionContextExecutor =
     ExecutionContext.fromExecutor(Executors.newSingleThreadExecutor())
 
   val voteCache = new RedditVoteCache
+  private val messageOwnerCache = new CacheMap[MesgID, UserID](20000).asScala
   val PINS_MAX = 50
   val UPVOTE = "⬆"
   val DOWNVOTE = "⬇"
   val CONFIDENCE_UP = 1.45
   val CONFIDENCE_DOWN = 1.7
+
+  def getOwner(channel: MessageChannel, message: MesgID): Future[UserID] = {
+    messageOwnerCache.get(message) match {
+      case None =>
+        val f = channel.getMessageById(message).queueFuture().map(_.getAuthor.getIdLong)
+        f.foreach(messageOwnerCache(message) = _)
+        f
+      case Some(id) =>
+        Future.successful(id)
+    }
+  }
 
   class RedditModeEnable extends PinCommand {
     override def name: String = "redditon"
@@ -67,13 +79,25 @@ class RedditEngine extends EventListener {
     override def canBeExecuted(message: Message): Boolean = true
 
     override def execute(message: Message, args: String): Unit = {
-      val mentionedUsers = message.getMentionedUsers match {
-        case x if !x.isEmpty => x.asScala
-        case _ => List(message.getAuthor)
-      }
-      message.getChannel.sendMessage(mentionedUsers
-        .map(user => s"${user.getName}#${user.getDiscriminator}: ${userVotes(user.getIdLong)} karma")
-        .mkString("\n")).queue()
+      val mentionedUsers = message.getMentionedUsers.asScala
+      val otherUsers =
+        if (args.isEmpty) List.empty
+        else {
+          val nameRegex = Pattern.compile(Pattern.quote(args), Pattern.CASE_INSENSITIVE)
+          message.getGuild.getMembers.asScala.view.filter { u =>
+            Option(u.getNickname).exists(nameRegex.matcher(_).find()) ||
+              nameRegex.matcher(s"${u.getUser.getName}#${u.getUser.getDiscriminator}").find()
+          }.map(_.getUser).take(10)
+        }
+
+      val allUsers = if (mentionedUsers.size + otherUsers.size == 0)
+        List(message.getAuthor)
+      else
+        mentionedUsers ++ otherUsers
+
+      message.getChannel.sendMessage(new EmbedBuilder().appendDescription(allUsers
+        .map(user => s"${user.getAsMention}: ${userVotes(user.getIdLong)} karma")
+        .mkString("\n")).build()).queue()
     }
   }
 
@@ -163,6 +187,7 @@ class RedditEngine extends EventListener {
           // TODO: Load reddit channels from save file
           case ev: MessageReceivedEvent if isRedditMode(ev.getChannel.getIdLong) =>
             if (ev.getMessage.getType == MessageType.DEFAULT) {
+              messageOwnerCache(ev.getMessageIdLong) = ev.getAuthor.getIdLong
               voteCache.set(ev.getMessageIdLong, 0, 0).botVoted = true
               addRedditReacts(ev.getMessage)
             }
@@ -173,15 +198,19 @@ class RedditEngine extends EventListener {
             val dir = if (ev.isInstanceOf[MessageReactionAddEvent]) 1 else -1
             reaction.getReactionEmote.getName match {
               case UPVOTE =>
+                for (u <- getOwner(ev.getChannel, message)) {
+                  userVotes(u) += dir
+                }
                 if (voteCache(message).isDefined) {
                   val votes = voteCache.upvote(message, dir)
-                  userVotes(ev.getUser.getIdLong) += dir
                   checkVotes(channel, message, votes)
                 } else cacheAndCheckVotes(channel, message)
               case DOWNVOTE =>
+                for (u <- getOwner(ev.getChannel, message)) {
+                  userVotes(u) -= dir
+                }
                 if (voteCache(message).isDefined) {
                   val votes = voteCache.downvote(message, dir)
-                  userVotes(ev.getUser.getIdLong) -= dir
                   checkVotes(channel, message, votes)
                 } else cacheAndCheckVotes(channel, message)
               case _ =>
