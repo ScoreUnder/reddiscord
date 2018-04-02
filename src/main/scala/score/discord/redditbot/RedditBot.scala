@@ -24,6 +24,7 @@ class RedditBot {
         cmds register new reddit.RedditModeDisable
         cmds register new reddit.RedditModeEnable
         cmds register new reddit.RedditKarma
+        cmds register new reddit.RedditKarmaTop
         builder addEventListener reddit
         builder addEventListener cmds
         builder addEventListener new HidePinMessageListener

@@ -1,12 +1,14 @@
 package score.discord.redditbot
 
 import java.util.concurrent.Executors
+import java.util.regex.Pattern
 
-import net.dv8tion.jda.core.entities.{Message, MessageChannel, MessageType, User}
+import net.dv8tion.jda.core.entities.{Message, MessageChannel, MessageType}
 import net.dv8tion.jda.core.events.message.react.{GenericMessageReactionEvent, MessageReactionAddEvent, MessageReactionRemoveAllEvent}
 import net.dv8tion.jda.core.events.message.{MessageDeleteEvent, MessageReceivedEvent, MessageUpdateEvent}
 import net.dv8tion.jda.core.events.{Event, ReadyEvent}
 import net.dv8tion.jda.core.hooks.EventListener
+import net.dv8tion.jda.core.{EmbedBuilder, MessageBuilder}
 import score.discord.redditbot.DiscordUtil._
 import score.discord.redditbot.FutureUtil._
 import score.discord.redditbot.UIConstants.{ERROR_EMOJI, OK_EMOJI}
@@ -98,6 +100,21 @@ class RedditEngine extends EventListener {
       message.getChannel.sendMessage(new EmbedBuilder().appendDescription(allUsers
         .map(user => s"${user.getAsMention}: ${userVotes(user.getIdLong)} karma")
         .mkString("\n")).build()).queue()
+    }
+  }
+
+  class RedditKarmaTop extends Command {
+    override def name: String = "top"
+
+    override def canBeExecuted(message: Message): Boolean = true
+
+    override def execute(message: Message, args: String): Unit = {
+      val topUsers = userVotes.toVector.sortBy(-_._2).take(10)
+      message.getChannel.sendMessage(new MessageBuilder()
+        .append("Top 10 users by karma:")
+        .setEmbed(new EmbedBuilder().appendDescription(topUsers
+          .map { case (user, votes) => s"<@$user>: $votes karma" }
+          .mkString("\n")).build).build).queue()
     }
   }
 
